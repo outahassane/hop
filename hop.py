@@ -24,12 +24,10 @@ def generer_document_pdf(df_planning, df_stats, mois_nom, annee):
     pdf = PDF()
     pdf.add_page()
     
-    # Titre du mois
     pdf.set_font('helvetica', 'B', 14)
     pdf.cell(0, 10, f'Mois : {mois_nom} {annee}', new_x="LMARGIN", new_y="NEXT")
     pdf.ln(5)
     
-    # Tableau du Planning
     pdf.set_font('helvetica', 'B', 10)
     col_widths = [30, 80, 80]
     headers = ['Date', 'Garde de Jour (12h)', 'Garde de Nuit (12h)']
@@ -44,7 +42,6 @@ def generer_document_pdf(df_planning, df_stats, mois_nom, annee):
         pdf.cell(col_widths[1], 10, str(row['Garde de Jour (12h)']), border=1, align='C')
         pdf.cell(col_widths[2], 10, str(row['Garde de Nuit (12h)']), border=1, align='C', new_x="LMARGIN", new_y="NEXT")
     
-    # Page 2 : Statistiques
     pdf.add_page()
     pdf.set_font('helvetica', 'B', 14)
     pdf.cell(0, 10, 'Statistiques de répartition (Equité)', new_x="LMARGIN", new_y="NEXT")
@@ -68,7 +65,7 @@ def generer_document_pdf(df_planning, df_stats, mois_nom, annee):
     return bytes(pdf.output())
 
 # ==========================================
-# 2. LE MOTEUR LOGIQUE (L'ALGORITHME ROTATIF)
+# 2. LE MOTEUR LOGIQUE
 # ==========================================
 def generer_planning_flexible(annee, mois, medecins, historique, conges):
     liste_med = list(medecins)
@@ -81,6 +78,7 @@ def generer_planning_flexible(annee, mois, medecins, historique, conges):
     compteur_jour = {m: 0 for m in liste_med}
     compteur_nuit = {m: 0 for m in liste_med}
 
+    # Integration du vrai historique pour la récupération au 1er du mois
     for hist in historique:
         id_unite_jour = hist['jour_relatif'] * 2
         id_unite_nuit = id_unite_jour + 1
@@ -159,11 +157,29 @@ _, nbr_jours_mois = calendar.monthrange(annee_cible, mois_cible)
 st.divider()
 
 st.subheader("👨‍⚕️ Gestion des Médecins")
-st.info("Pour ajouter un médecin, ajoutez une virgule et son nom. Pour en supprimer un, effacez-le de la liste.")
-
 noms_par_defaut = "Dr SAKINA, Dr ELARCH, Dr IMANE, Dr ITTO"
-medecins_input = st.text_area("Équipe actuelle :", noms_par_defaut)
+medecins_input = st.text_area("Équipe actuelle (séparés par des virgules) :", noms_par_defaut)
 liste_medecins = [m.strip() for m in medecins_input.split(',') if m.strip() != ""]
+
+# -- NOUVELLE SECTION : HISTORIQUE --
+st.divider()
+st.subheader("⏪ Historique du mois précédent (Important)")
+st.info("Indiquez qui était de garde les deux derniers jours du mois précédent pour garantir qu'ils aient leur temps de récupération.")
+
+options_historique = ["Personne / Remplaçant"] + liste_medecins
+col_h1, col_h2 = st.columns(2)
+
+with col_h1:
+    st.markdown("**Avant-dernier jour (J-2)**")
+    j2_jour = st.selectbox("Garde de Jour (J-2)", options_historique, index=0)
+    j2_nuit = st.selectbox("Garde de Nuit (J-2)", options_historique, index=0)
+
+with col_h2:
+    st.markdown("**Dernier jour (J-1)**")
+    j1_jour = st.selectbox("Garde de Jour (J-1)", options_historique, index=0)
+    j1_nuit = st.selectbox("Garde de Nuit (J-1)", options_historique, index=0)
+
+st.divider()
 
 st.subheader("🌴 Congés et Absences (Optionnel)")
 conges_dict = {}
@@ -183,10 +199,15 @@ if st.button("🚀 Générer le planning du mois", use_container_width=True, typ
     if len(liste_medecins) == 0:
         st.error("Vous devez renseigner au moins un médecin.")
     else:
-        historique_fictif = []
+        # Construction de l'historique réel à partir des champs de saisie
+        historique_reel = []
+        if j2_jour != "Personne / Remplaçant" or j2_nuit != "Personne / Remplaçant":
+            historique_reel.append({'jour_relatif': -2, 'jour': j2_jour, 'nuit': j2_nuit})
+        if j1_jour != "Personne / Remplaçant" or j1_nuit != "Personne / Remplaçant":
+            historique_reel.append({'jour_relatif': -1, 'jour': j1_jour, 'nuit': j1_nuit})
         
         # Génération
-        planning, c_total, c_jour, c_nuit = generer_planning_flexible(annee_cible, mois_cible, liste_medecins, historique_fictif, conges_dict)
+        planning, c_total, c_jour, c_nuit = generer_planning_flexible(annee_cible, mois_cible, liste_medecins, historique_reel, conges_dict)
         
         # Préparation des DataFrames
         df = pd.DataFrame(planning)
@@ -203,13 +224,12 @@ if st.button("🚀 Générer le planning du mois", use_container_width=True, typ
                 })
         stats_df = pd.DataFrame(stats_data)
         
-        st.success(f"Planning généré avec succès pour {nom_mois} {annee_cible} ! Rotation Jour/Nuit respectée.")
+        st.success(f"Planning généré avec succès ! Les gardes de la fin du mois précédent ont bien été prises en compte.")
         st.dataframe(df_affichage, use_container_width=True, hide_index=True)
         
         st.markdown("### 📊 Répartition des gardes ce mois-ci")
         st.table(stats_df)
         
-        # Création et Bouton de téléchargement du PDF
         pdf_bytes = generer_document_pdf(df_affichage, stats_df, nom_mois, annee_cible)
         
         st.download_button(
