@@ -1,9 +1,74 @@
 import streamlit as st
 import calendar
 import pandas as pd
+from fpdf import FPDF
+import io
 
 # ==========================================
-# 1. LE MOTEUR LOGIQUE (L'ALGORITHME ROTATIF)
+# 1. CLASSE POUR LE FORMATAGE DU PDF
+# ==========================================
+class PDF(FPDF):
+    def header(self):
+        self.set_font('helvetica', 'B', 16)
+        self.cell(0, 10, 'Hôpital Sharifa Marrakech', border=0, align='C', new_x="LMARGIN", new_y="NEXT")
+        self.set_font('helvetica', 'I', 12)
+        self.cell(0, 10, 'Planning de Gardes du Service', border=0, align='C', new_x="LMARGIN", new_y="NEXT")
+        self.ln(5)
+
+    def footer(self):
+        self.set_y(-15)
+        self.set_font('helvetica', 'I', 8)
+        self.cell(0, 10, f'Page {self.page_no()}/{{nb}}', align='C')
+
+def generer_document_pdf(df_planning, df_stats, mois_nom, annee):
+    pdf = PDF()
+    pdf.add_page()
+    
+    # Titre du mois
+    pdf.set_font('helvetica', 'B', 14)
+    pdf.cell(0, 10, f'Mois : {mois_nom} {annee}', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(5)
+    
+    # Tableau du Planning
+    pdf.set_font('helvetica', 'B', 10)
+    col_widths = [30, 80, 80]
+    headers = ['Date', 'Garde de Jour (12h)', 'Garde de Nuit (12h)']
+    
+    for i in range(len(headers)):
+        pdf.cell(col_widths[i], 10, headers[i], border=1, align='C')
+    pdf.ln()
+    
+    pdf.set_font('helvetica', '', 10)
+    for _, row in df_planning.iterrows():
+        pdf.cell(col_widths[0], 10, str(row['Date']), border=1, align='C')
+        pdf.cell(col_widths[1], 10, str(row['Garde de Jour (12h)']), border=1, align='C')
+        pdf.cell(col_widths[2], 10, str(row['Garde de Nuit (12h)']), border=1, align='C', new_x="LMARGIN", new_y="NEXT")
+    
+    # Page 2 : Statistiques
+    pdf.add_page()
+    pdf.set_font('helvetica', 'B', 14)
+    pdf.cell(0, 10, 'Statistiques de répartition (Equité)', new_x="LMARGIN", new_y="NEXT")
+    pdf.ln(5)
+    
+    pdf.set_font('helvetica', 'B', 10)
+    stat_widths = [60, 40, 40, 40]
+    stat_headers = ['Médecin', 'Total Gardes', 'Jours', 'Nuits']
+    
+    for i in range(len(stat_headers)):
+        pdf.cell(stat_widths[i], 10, stat_headers[i], border=1, align='C')
+    pdf.ln()
+    
+    pdf.set_font('helvetica', '', 10)
+    for _, row in df_stats.iterrows():
+        pdf.cell(stat_widths[0], 10, str(row['Médecin']), border=1, align='C')
+        pdf.cell(stat_widths[1], 10, str(row['Total Gardes']), border=1, align='C')
+        pdf.cell(stat_widths[2], 10, str(row['Jours (12h)']), border=1, align='C')
+        pdf.cell(stat_widths[3], 10, str(row['Nuits (12h)']), border=1, align='C', new_x="LMARGIN", new_y="NEXT")
+        
+    return bytes(pdf.output())
+
+# ==========================================
+# 2. LE MOTEUR LOGIQUE (L'ALGORITHME ROTATIF)
 # ==========================================
 def generer_planning_flexible(annee, mois, medecins, historique, conges):
     liste_med = list(medecins)
@@ -12,7 +77,6 @@ def generer_planning_flexible(annee, mois, medecins, historique, conges):
 
     disponibilites = {m: -10 for m in liste_med}
     
-    # NOUVEAU : Compteurs séparés pour forcer l'équité et la rotation
     compteur_total = {m: 0 for m in liste_med}
     compteur_jour = {m: 0 for m in liste_med}
     compteur_nuit = {m: 0 for m in liste_med}
@@ -39,25 +103,23 @@ def generer_planning_flexible(annee, mois, medecins, historique, conges):
 
         # --- AFFECTATION GARDE DE JOUR ---
         candidats_jour = [m for m in liste_med if disponibilites[m] <= id_unite_jour and n_est_pas_en_conge(m)]
-        # Tri : On priorise celui qui a fait le plus de nuits par rapport à ses jours (rotation), puis l'équité totale
         candidats_jour.sort(key=lambda m: (1 if "Remplaçant" in m else 0, compteur_jour[m] - compteur_nuit[m], compteur_total[m]))
         
         medecin_jour = candidats_jour[0]
         if "Remplaçant" not in medecin_jour:
             compteur_total[medecin_jour] += 1
             compteur_jour[medecin_jour] += 1
-            disponibilites[medecin_jour] = id_unite_jour + 3 # Repos 24h
+            disponibilites[medecin_jour] = id_unite_jour + 3
 
         # --- AFFECTATION GARDE DE NUIT ---
         candidats_nuit = [m for m in liste_med if disponibilites[m] <= id_unite_nuit and m != medecin_jour and n_est_pas_en_conge(m)]
-        # Tri : On priorise celui qui a fait le plus de jours par rapport à ses nuits (rotation), puis l'équité totale
         candidats_nuit.sort(key=lambda m: (1 if "Remplaçant" in m else 0, compteur_nuit[m] - compteur_jour[m], compteur_total[m]))
         
         medecin_nuit = candidats_nuit[0]
         if "Remplaçant" not in medecin_nuit:
             compteur_total[medecin_nuit] += 1
             compteur_nuit[medecin_nuit] += 1
-            disponibilites[medecin_nuit] = id_unite_nuit + 4 # Repos 36h
+            disponibilites[medecin_nuit] = id_unite_nuit + 4
 
         planning.append({
             'Jour_int': jour_du_mois,
@@ -70,14 +132,13 @@ def generer_planning_flexible(annee, mois, medecins, historique, conges):
 
 
 # ==========================================
-# 2. L'INTERFACE WEB (STREAMLIT)
+# 3. L'INTERFACE WEB (STREAMLIT)
 # ==========================================
 st.set_page_config(page_title="Gardes - Hôpital Sharifa", page_icon="🏥", layout="wide")
 
 st.title("🏥 Générateur de Gardes - Hôpital Sharifa Marrakech")
-st.markdown("Automatisation avec respect strict des repos et **rotation équitable Jour/Nuit**.")
+st.markdown("Automatisation avec respect strict des repos et rotation équitable Jour/Nuit.")
 
-# -- SECTION 1 : Paramètres --
 col1, col2 = st.columns(2)
 
 dictionnaire_mois = {
@@ -97,7 +158,6 @@ _, nbr_jours_mois = calendar.monthrange(annee_cible, mois_cible)
 
 st.divider()
 
-# -- SECTION 2 : Gestion des Médecins --
 st.subheader("👨‍⚕️ Gestion des Médecins")
 st.info("Pour ajouter un médecin, ajoutez une virgule et son nom. Pour en supprimer un, effacez-le de la liste.")
 
@@ -105,7 +165,6 @@ noms_par_defaut = "Dr SAKINA, Dr ELARCH, Dr IMANE, Dr ITTO"
 medecins_input = st.text_area("Équipe actuelle :", noms_par_defaut)
 liste_medecins = [m.strip() for m in medecins_input.split(',') if m.strip() != ""]
 
-# -- SECTION 3 : Gestion des Congés --
 st.subheader("🌴 Congés et Absences (Optionnel)")
 conges_dict = {}
 
@@ -119,7 +178,6 @@ with st.expander("Cliquez ici pour déclarer des congés sur ce mois"):
 
 st.divider()
 
-# -- SECTION 4 : Génération et Affichage --
 if st.button("🚀 Générer le planning du mois", use_container_width=True, type="primary"):
     
     if len(liste_medecins) == 0:
@@ -127,19 +185,13 @@ if st.button("🚀 Générer le planning du mois", use_container_width=True, typ
     else:
         historique_fictif = []
         
-        # Lancement de l'algorithme
+        # Génération
         planning, c_total, c_jour, c_nuit = generer_planning_flexible(annee_cible, mois_cible, liste_medecins, historique_fictif, conges_dict)
         
+        # Préparation des DataFrames
         df = pd.DataFrame(planning)
-        df = df.drop(columns=['Jour_int']) 
+        df_affichage = df.drop(columns=['Jour_int']) 
         
-        st.success(f"Planning généré avec succès pour {nom_mois} {annee_cible} ! Rotation Jour/Nuit respectée.")
-        
-        # Affichage du tableau de gardes
-        st.dataframe(df, use_container_width=True, hide_index=True)
-        
-        # Statistiques d'équité (Améliorées)
-        st.markdown("### 📊 Répartition des gardes ce mois-ci")
         stats_data = []
         for m in liste_medecins:
             if "Remplaçant" not in m:
@@ -149,15 +201,21 @@ if st.button("🚀 Générer le planning du mois", use_container_width=True, typ
                     "Jours (12h)": c_jour[m],
                     "Nuits (12h)": c_nuit[m]
                 })
-        
         stats_df = pd.DataFrame(stats_data)
+        
+        st.success(f"Planning généré avec succès pour {nom_mois} {annee_cible} ! Rotation Jour/Nuit respectée.")
+        st.dataframe(df_affichage, use_container_width=True, hide_index=True)
+        
+        st.markdown("### 📊 Répartition des gardes ce mois-ci")
         st.table(stats_df)
         
-        # Bouton d'exportation CSV
-        csv = df.to_csv(index=False).encode('utf-8')
+        # Création et Bouton de téléchargement du PDF
+        pdf_bytes = generer_document_pdf(df_affichage, stats_df, nom_mois, annee_cible)
+        
         st.download_button(
-            label="📥 Télécharger le planning pour Excel (CSV)",
-            data=csv,
-            file_name=f"Planning_Sharifa_{nom_mois}_{annee_cible}.csv",
-            mime="text/csv"
+            label="📄 Télécharger le planning en PDF (Prêt à imprimer)",
+            data=pdf_bytes,
+            file_name=f"Planning_Sharifa_{nom_mois}_{annee_cible}.pdf",
+            mime="application/pdf",
+            type="primary"
         )
