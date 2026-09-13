@@ -78,7 +78,6 @@ def generer_planning_flexible(annee, mois, medecins, historique, conges):
     compteur_jour = {m: 0 for m in liste_med}
     compteur_nuit = {m: 0 for m in liste_med}
 
-    # Integration du vrai historique pour la récupération au 1er du mois
     for hist in historique:
         id_unite_jour = hist['jour_relatif'] * 2
         id_unite_nuit = id_unite_jour + 1
@@ -134,7 +133,7 @@ def generer_planning_flexible(annee, mois, medecins, historique, conges):
 # ==========================================
 st.set_page_config(page_title="Gardes - Hôpital Sharifa", page_icon="🏥", layout="wide")
 
-st.title("🏥 Générateur de Gardes - Hôpital Sharifa Marrakech")
+st.title("🏥 Générateur de Gardes - Hôpital Sharifa")
 st.markdown("Automatisation avec respect strict des repos et rotation équitable Jour/Nuit.")
 
 col1, col2 = st.columns(2)
@@ -156,17 +155,39 @@ _, nbr_jours_mois = calendar.monthrange(annee_cible, mois_cible)
 
 st.divider()
 
+# -- NOUVELLE SECTION : GESTION DES MÉDECINS INTERACTIVE --
 st.subheader("👨‍⚕️ Gestion des Médecins")
-noms_par_defaut = "Dr SAKINA, Dr ELARCH, Dr IMANE, Dr ITTO"
-medecins_input = st.text_area("Équipe actuelle (séparés par des virgules) :", noms_par_defaut)
-liste_medecins = [m.strip() for m in medecins_input.split(',') if m.strip() != ""]
 
-# -- NOUVELLE SECTION : HISTORIQUE --
+# Initialisation de la liste dans la mémoire de l'application
+if "liste_medecins" not in st.session_state:
+    st.session_state.liste_medecins = ["Dr SAKINA", "Dr ELARCH", "Dr IMANE", "Dr ITTO"]
+
+# Formulaire pour ajouter un médecin
+col_ajout1, col_ajout2 = st.columns([3, 1])
+with col_ajout1:
+    nouveau_med = st.text_input("Nom du nouveau médecin", placeholder="Ex: Dr OMAR", label_visibility="collapsed")
+with col_ajout2:
+    if st.button("➕ Ajouter", use_container_width=True):
+        if nouveau_med and nouveau_med not in st.session_state.liste_medecins:
+            st.session_state.liste_medecins.append(nouveau_med.strip())
+            st.rerun()
+
+st.markdown("**Équipe actuelle :**")
+# Affichage de la liste avec bouton de suppression
+for i, med in enumerate(st.session_state.liste_medecins):
+    col_nom, col_btn = st.columns([3, 1])
+    with col_nom:
+        st.markdown(f"🩺 **{med}**")
+    with col_btn:
+        if st.button("❌ Supprimer", key=f"del_{i}", use_container_width=True):
+            st.session_state.liste_medecins.pop(i)
+            st.rerun()
+
 st.divider()
-st.subheader("⏪ Historique du mois précédent (Important)")
-st.info("Indiquez qui était de garde les deux derniers jours du mois précédent pour garantir qu'ils aient leur temps de récupération.")
 
-options_historique = ["Personne / Remplaçant"] + liste_medecins
+# -- SECTION : HISTORIQUE --
+st.subheader("⏪ Historique du mois précédent")
+options_historique = ["Personne / Remplaçant"] + st.session_state.liste_medecins
 col_h1, col_h2 = st.columns(2)
 
 with col_h1:
@@ -181,40 +202,41 @@ with col_h2:
 
 st.divider()
 
+# -- SECTION : CONGÉS --
 st.subheader("🌴 Congés et Absences (Optionnel)")
 conges_dict = {}
 
 with st.expander("Cliquez ici pour déclarer des congés sur ce mois"):
     jours_possibles = list(range(1, nbr_jours_mois + 1))
     
-    for med in liste_medecins:
+    for med in st.session_state.liste_medecins:
         jours_absents = st.multiselect(f"Jours d'absence pour {med} :", options=jours_possibles)
         if jours_absents:
             conges_dict[med] = jours_absents
 
 st.divider()
 
+# -- SECTION : GÉNÉRATION --
 if st.button("🚀 Générer le planning du mois", use_container_width=True, type="primary"):
     
-    if len(liste_medecins) == 0:
-        st.error("Vous devez renseigner au moins un médecin.")
+    if len(st.session_state.liste_medecins) == 0:
+        st.error("Vous devez renseigner au moins un médecin dans l'équipe.")
     else:
-        # Construction de l'historique réel à partir des champs de saisie
         historique_reel = []
         if j2_jour != "Personne / Remplaçant" or j2_nuit != "Personne / Remplaçant":
             historique_reel.append({'jour_relatif': -2, 'jour': j2_jour, 'nuit': j2_nuit})
         if j1_jour != "Personne / Remplaçant" or j1_nuit != "Personne / Remplaçant":
             historique_reel.append({'jour_relatif': -1, 'jour': j1_jour, 'nuit': j1_nuit})
         
-        # Génération
-        planning, c_total, c_jour, c_nuit = generer_planning_flexible(annee_cible, mois_cible, liste_medecins, historique_reel, conges_dict)
+        planning, c_total, c_jour, c_nuit = generer_planning_flexible(
+            annee_cible, mois_cible, st.session_state.liste_medecins, historique_reel, conges_dict
+        )
         
-        # Préparation des DataFrames
         df = pd.DataFrame(planning)
         df_affichage = df.drop(columns=['Jour_int']) 
         
         stats_data = []
-        for m in liste_medecins:
+        for m in st.session_state.liste_medecins:
             if "Remplaçant" not in m:
                 stats_data.append({
                     "Médecin": m,
@@ -224,7 +246,7 @@ if st.button("🚀 Générer le planning du mois", use_container_width=True, typ
                 })
         stats_df = pd.DataFrame(stats_data)
         
-        st.success(f"Planning généré avec succès ! Les gardes de la fin du mois précédent ont bien été prises en compte.")
+        st.success(f"Planning généré avec succès !")
         st.dataframe(df_affichage, use_container_width=True, hide_index=True)
         
         st.markdown("### 📊 Répartition des gardes ce mois-ci")
