@@ -216,15 +216,17 @@ st.subheader("🌴 Congés et Absences (Optionnel)")
 premier_jour = datetime.date(annee_cible, mois_cible, 1)
 dernier_jour = datetime.date(annee_cible, mois_cible, nbr_jours_mois)
 
-# La liste des congés démarre toujours vide pour ne pas induire en erreur
 if "liste_conges" not in st.session_state:
     st.session_state.liste_conges = []
 
 st.markdown("**Formulaire d'ajout d'une absence :**")
 col_c1, col_c2, col_c3, col_c4 = st.columns([2, 1.5, 1.5, 1])
 
+# Ajout de l'option neutre par défaut pour éviter la confusion
+options_conges = ["--- Sélectionner un médecin ---"] + st.session_state.liste_medecins
+
 with col_c1:
-    med_conge = st.selectbox("Médecin concerné", st.session_state.liste_medecins, key="sel_med_conge")
+    med_conge = st.selectbox("Médecin concerné", options_conges, key="sel_med_conge")
 with col_c2:
     debut_conge = st.date_input("Date de début", value=premier_jour, min_value=premier_jour, max_value=dernier_jour)
 with col_c3:
@@ -232,14 +234,16 @@ with col_c3:
 with col_c4:
     st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
     if st.button("➕ Ajouter congé", key="btn_add_conge", use_container_width=True):
-        st.session_state.liste_conges.append({
-            "medecin": med_conge,
-            "debut": debut_conge,
-            "fin": fin_conge
-        })
-        st.rerun()
+        if med_conge != "--- Sélectionner un médecin ---":
+            st.session_state.liste_conges.append({
+                "medecin": med_conge,
+                "debut": debut_conge,
+                "fin": fin_conge
+            })
+            st.rerun()
+        else:
+            st.warning("Veuillez sélectionner un médecin avant d'ajouter l'absence.")
 
-# Cette zone n'apparaît QUE si l'utilisateur a vraiment cliqué sur "Ajouter congé"
 if st.session_state.liste_conges:
     st.markdown("---")
     st.markdown("**✅ Absences enregistrées pour ce mois :**")
