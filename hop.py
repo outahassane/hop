@@ -2,7 +2,7 @@ import streamlit as st
 import calendar
 import pandas as pd
 from fpdf import FPDF
-import io
+import datetime
 
 # ==========================================
 # 1. CLASSE POUR LE FORMATAGE DU PDF
@@ -155,25 +155,22 @@ _, nbr_jours_mois = calendar.monthrange(annee_cible, mois_cible)
 
 st.divider()
 
-# -- NOUVELLE SECTION : GESTION DES MÉDECINS INTERACTIVE --
+# -- GESTION DES MÉDECINS INTERACTIVE --
 st.subheader("👨‍⚕️ Gestion des Médecins")
 
-# Initialisation de la liste dans la mémoire de l'application
 if "liste_medecins" not in st.session_state:
     st.session_state.liste_medecins = ["Dr SAKINA", "Dr ELARCH", "Dr IMANE", "Dr ITTO"]
 
-# Formulaire pour ajouter un médecin
 col_ajout1, col_ajout2 = st.columns([3, 1])
 with col_ajout1:
     nouveau_med = st.text_input("Nom du nouveau médecin", placeholder="Ex: Dr OMAR", label_visibility="collapsed")
 with col_ajout2:
     if st.button("➕ Ajouter", use_container_width=True):
-        if nouveau_med and nouveau_med not in st.session_state.liste_medecins:
+        if nouveau_med and nouveau_med.strip() not in st.session_state.liste_medecins:
             st.session_state.liste_medecins.append(nouveau_med.strip())
             st.rerun()
 
 st.markdown("**Équipe actuelle :**")
-# Affichage de la liste avec bouton de suppression
 for i, med in enumerate(st.session_state.liste_medecins):
     col_nom, col_btn = st.columns([3, 1])
     with col_nom:
@@ -185,20 +182,30 @@ for i, med in enumerate(st.session_state.liste_medecins):
 
 st.divider()
 
-# -- SECTION : HISTORIQUE --
+# -- SECTION : HISTORIQUE (DATES DYNAMIQUES) --
 st.subheader("⏪ Historique du mois précédent")
+
+premier_jour_mois_cible = datetime.date(annee_cible, mois_cible, 1)
+date_j1 = premier_jour_mois_cible - datetime.timedelta(days=1)
+date_j2 = premier_jour_mois_cible - datetime.timedelta(days=2)
+
+noms_mois_fr = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
+
+label_j2 = f"Le {date_j2.day} {noms_mois_fr[date_j2.month]}"
+label_j1 = f"Le {date_j1.day} {noms_mois_fr[date_j1.month]}"
+
 options_historique = ["Personne / Remplaçant"] + st.session_state.liste_medecins
 col_h1, col_h2 = st.columns(2)
 
 with col_h1:
-    st.markdown("**Avant-dernier jour (J-2)**")
-    j2_jour = st.selectbox("Garde de Jour (J-2)", options_historique, index=0)
-    j2_nuit = st.selectbox("Garde de Nuit (J-2)", options_historique, index=0)
+    st.markdown(f"**{label_j2} (Avant-dernier jour)**")
+    j2_jour = st.selectbox("Garde de Jour", options_historique, key="j2_jour")
+    j2_nuit = st.selectbox("Garde de Nuit", options_historique, key="j2_nuit")
 
 with col_h2:
-    st.markdown("**Dernier jour (J-1)**")
-    j1_jour = st.selectbox("Garde de Jour (J-1)", options_historique, index=0)
-    j1_nuit = st.selectbox("Garde de Nuit (J-1)", options_historique, index=0)
+    st.markdown(f"**{label_j1} (Dernier jour)**")
+    j1_jour = st.selectbox("Garde de Jour", options_historique, key="j1_jour")
+    j1_nuit = st.selectbox("Garde de Nuit", options_historique, key="j1_nuit")
 
 st.divider()
 
