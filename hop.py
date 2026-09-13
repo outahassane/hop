@@ -158,7 +158,7 @@ _, nbr_jours_mois = calendar.monthrange(annee_cible, mois_cible)
 
 st.divider()
 
-# -- GESTION DES MÉDECINS --
+# -- GESTION DES MÉDECINS INTERACTIVE --
 st.subheader("👨‍⚕️ Gestion des Médecins")
 
 if "liste_medecins" not in st.session_state:
@@ -210,14 +210,20 @@ with col_h2:
 
 st.divider()
 
-# -- GESTION DES CONGÉS (NOUVELLE INTERFACE) --
+# -- GESTION DES CONGÉS --
 st.subheader("🌴 Congés et Absences (Optionnel)")
-
-if "liste_conges" not in st.session_state:
-    st.session_state.liste_conges = []
 
 premier_jour = datetime.date(annee_cible, mois_cible, 1)
 dernier_jour = datetime.date(annee_cible, mois_cible, nbr_jours_mois)
+
+# Ajout de l'exemple par défaut
+if "liste_conges" not in st.session_state:
+    date_exemple = datetime.date(annee_cible, mois_cible, 17) if nbr_jours_mois >= 17 else premier_jour
+    st.session_state.liste_conges = [{
+        "medecin": "Dr SAKINA",
+        "debut": date_exemple,
+        "fin": date_exemple
+    }]
 
 st.markdown("**Ajouter une période d'absence :**")
 col_c1, col_c2, col_c3, col_c4 = st.columns([2, 1.5, 1.5, 1])
@@ -239,7 +245,7 @@ with col_c4:
         st.rerun()
 
 if st.session_state.liste_conges:
-    st.markdown("**Absences enregistrées :**")
+    st.markdown("**Absences enregistrées (Exemple) :**")
     for i, conge in enumerate(st.session_state.liste_conges):
         col_cn1, col_cn2 = st.columns([4, 1])
         with col_cn1:
@@ -258,14 +264,12 @@ if st.button("🚀 Générer le planning du mois", use_container_width=True, typ
     if len(st.session_state.liste_medecins) == 0:
         st.error("Vous devez renseigner au moins un médecin dans l'équipe.")
     else:
-        # Traitement de l'historique
         historique_reel = []
         if j2_jour != "Personne / Renfort" or j2_nuit != "Personne / Renfort":
             historique_reel.append({'jour_relatif': -2, 'jour': j2_jour, 'nuit': j2_nuit})
         if j1_jour != "Personne / Renfort" or j1_nuit != "Personne / Renfort":
             historique_reel.append({'jour_relatif': -1, 'jour': j1_jour, 'nuit': j1_nuit})
         
-        # Traitement des congés (transformation en dictionnaire)
         conges_dict = {}
         for c in st.session_state.liste_conges:
             med = c["medecin"]
