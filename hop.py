@@ -182,7 +182,7 @@ for i, med in enumerate(st.session_state.liste_medecins):
 
 st.divider()
 
-# -- SECTION : HISTORIQUE (DATES DYNAMIQUES) --
+# -- HISTORIQUE (DATES DYNAMIQUES) --
 st.subheader("⏪ Historique du mois précédent")
 
 premier_jour_mois_cible = datetime.date(annee_cible, mois_cible, 1)
@@ -209,17 +209,35 @@ with col_h2:
 
 st.divider()
 
-# -- SECTION : CONGÉS --
+# -- SECTION : CONGÉS (MISE À JOUR CALENDRIER) --
 st.subheader("🌴 Congés et Absences (Optionnel)")
 conges_dict = {}
 
 with st.expander("Cliquez ici pour déclarer des congés sur ce mois"):
-    jours_possibles = list(range(1, nbr_jours_mois + 1))
+    st.info("💡 Sélectionnez la période d'absence : Cliquez sur la date de départ, puis cliquez sur la date de retour.")
+    
+    # On limite le calendrier au mois sélectionné pour éviter les erreurs
+    premier_jour = datetime.date(annee_cible, mois_cible, 1)
+    dernier_jour = datetime.date(annee_cible, mois_cible, nbr_jours_mois)
     
     for med in st.session_state.liste_medecins:
-        jours_absents = st.multiselect(f"Jours d'absence pour {med} :", options=jours_possibles)
-        if jours_absents:
-            conges_dict[med] = jours_absents
+        plage = st.date_input(
+            f"🏖️ Période d'absence pour **{med}** :",
+            value=[], # Vide par défaut, déclenche le mode "plage de dates"
+            min_value=premier_jour,
+            max_value=dernier_jour,
+            format="DD/MM/YYYY",
+            key=f"conge_{med}"
+        )
+        
+        # Si des dates ont été sélectionnées dans le calendrier
+        if isinstance(plage, tuple) or isinstance(plage, list):
+            if len(plage) == 2:
+                # Une période complète a été cliquée (Début et Fin)
+                conges_dict[med] = list(range(plage[0].day, plage[1].day + 1))
+            elif len(plage) == 1:
+                # Un seul jour a été cliqué pour le moment
+                conges_dict[med] = [plage[0].day]
 
 st.divider()
 
