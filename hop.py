@@ -69,7 +69,6 @@ def generer_document_pdf(df_planning, df_stats, mois_nom, annee):
 # ==========================================
 def generer_planning_flexible(annee, mois, medecins, historique, conges):
     liste_med = list(medecins)
-    # Création des renforts virtuels pour assurer la continuité
     while len(liste_med) < 8:
         liste_med.append(f"RENFORT_VIRTUEL_{len(liste_med)}")
 
@@ -119,7 +118,6 @@ def generer_planning_flexible(annee, mois, medecins, historique, conges):
             compteur_nuit[medecin_nuit] += 1
             disponibilites[medecin_nuit] = id_unite_nuit + 4
 
-        # Nettoyage des noms pour l'affichage final
         nom_affichage_jour = "Renfort / Garde Creuse" if "RENFORT" in medecin_jour else medecin_jour
         nom_affichage_nuit = "Renfort / Garde Creuse" if "RENFORT" in medecin_nuit else medecin_nuit
 
@@ -160,7 +158,7 @@ _, nbr_jours_mois = calendar.monthrange(annee_cible, mois_cible)
 
 st.divider()
 
-# -- GESTION DES MÉDECINS INTERACTIVE --
+# -- GESTION DES MÉDECINS --
 st.subheader("👨‍⚕️ Gestion des Médecins")
 
 if "liste_medecins" not in st.session_state:
@@ -170,7 +168,7 @@ col_ajout1, col_ajout2 = st.columns([3, 1])
 with col_ajout1:
     nouveau_med = st.text_input("Nom du nouveau médecin", placeholder="Ex: Dr OMAR", label_visibility="collapsed")
 with col_ajout2:
-    if st.button("➕ Ajouter", use_container_width=True):
+    if st.button("➕ Ajouter médecin", use_container_width=True):
         if nouveau_med and nouveau_med.strip() not in st.session_state.liste_medecins:
             st.session_state.liste_medecins.append(nouveau_med.strip())
             st.rerun()
@@ -187,15 +185,13 @@ for i, med in enumerate(st.session_state.liste_medecins):
 
 st.divider()
 
-# -- HISTORIQUE (DATES DYNAMIQUES) --
+# -- HISTORIQUE DU MOIS PRÉCÉDENT --
 st.subheader("⏪ Historique du mois précédent")
 
 premier_jour_mois_cible = datetime.date(annee_cible, mois_cible, 1)
 date_j1 = premier_jour_mois_cible - datetime.timedelta(days=1)
 date_j2 = premier_jour_mois_cible - datetime.timedelta(days=2)
-
 noms_mois_fr = ["", "Janvier", "Février", "Mars", "Avril", "Mai", "Juin", "Juillet", "Août", "Septembre", "Octobre", "Novembre", "Décembre"]
-
 label_j2 = f"Le {date_j2.day} {noms_mois_fr[date_j2.month]}"
 label_j1 = f"Le {date_j1.day} {noms_mois_fr[date_j1.month]}"
 
@@ -214,31 +210,45 @@ with col_h2:
 
 st.divider()
 
-# -- SECTION : CONGÉS AMÉLIORÉE (DÉBUT ET FIN) --
+# -- GESTION DES CONGÉS (NOUVELLE INTERFACE) --
 st.subheader("🌴 Congés et Absences (Optionnel)")
-conges_dict = {}
 
-with st.expander("Cliquez ici pour déclarer des congés sur ce mois"):
-    st.info("💡 Cochez un médecin pour lui déclarer une absence. Pour un seul jour de repos, mettez la même date dans 'Début' et 'Fin'.")
-    
-    premier_jour = datetime.date(annee_cible, mois_cible, 1)
-    dernier_jour = datetime.date(annee_cible, mois_cible, nbr_jours_mois)
-    
-    for med in st.session_state.liste_medecins:
-        col_check, col_deb, col_fin = st.columns([1.5, 2, 2])
-        
-        with col_check:
-            st.markdown("<div style='margin-top: 32px;'></div>", unsafe_allow_html=True)
-            en_conge = st.checkbox(f"Absence **{med}**")
-            
-        if en_conge:
-            with col_deb:
-                debut = st.date_input(f"Date de début", value=premier_jour, min_value=premier_jour, max_value=dernier_jour, key=f"deb_{med}")
-            with col_fin:
-                fin = st.date_input(f"Date de fin", value=debut, min_value=debut, max_value=dernier_jour, key=f"fin_{med}")
-            
-            # Ajout des jours à la liste des congés
-            conges_dict[med] = list(range(debut.day, fin.day + 1))
+if "liste_conges" not in st.session_state:
+    st.session_state.liste_conges = []
+
+premier_jour = datetime.date(annee_cible, mois_cible, 1)
+dernier_jour = datetime.date(annee_cible, mois_cible, nbr_jours_mois)
+
+st.markdown("**Ajouter une période d'absence :**")
+col_c1, col_c2, col_c3, col_c4 = st.columns([2, 1.5, 1.5, 1])
+
+with col_c1:
+    med_conge = st.selectbox("Médecin", st.session_state.liste_medecins, key="sel_med_conge")
+with col_c2:
+    debut_conge = st.date_input("Date de début", value=premier_jour, min_value=premier_jour, max_value=dernier_jour)
+with col_c3:
+    fin_conge = st.date_input("Date de fin", value=debut_conge, min_value=debut_conge, max_value=dernier_jour)
+with col_c4:
+    st.markdown("<div style='margin-top: 28px;'></div>", unsafe_allow_html=True)
+    if st.button("➕ Ajouter congé", key="btn_add_conge", use_container_width=True):
+        st.session_state.liste_conges.append({
+            "medecin": med_conge,
+            "debut": debut_conge,
+            "fin": fin_conge
+        })
+        st.rerun()
+
+if st.session_state.liste_conges:
+    st.markdown("**Absences enregistrées :**")
+    for i, conge in enumerate(st.session_state.liste_conges):
+        col_cn1, col_cn2 = st.columns([4, 1])
+        with col_cn1:
+            st.info(f"🏖️ **{conge['medecin']}** : du {conge['debut'].strftime('%d/%m/%Y')} au {conge['fin'].strftime('%d/%m/%Y')}")
+        with col_cn2:
+            st.markdown("<div style='margin-top: 14px;'></div>", unsafe_allow_html=True)
+            if st.button("❌ Retirer", key=f"del_conge_{i}", use_container_width=True):
+                st.session_state.liste_conges.pop(i)
+                st.rerun()
 
 st.divider()
 
@@ -248,11 +258,22 @@ if st.button("🚀 Générer le planning du mois", use_container_width=True, typ
     if len(st.session_state.liste_medecins) == 0:
         st.error("Vous devez renseigner au moins un médecin dans l'équipe.")
     else:
+        # Traitement de l'historique
         historique_reel = []
         if j2_jour != "Personne / Renfort" or j2_nuit != "Personne / Renfort":
             historique_reel.append({'jour_relatif': -2, 'jour': j2_jour, 'nuit': j2_nuit})
         if j1_jour != "Personne / Renfort" or j1_nuit != "Personne / Renfort":
             historique_reel.append({'jour_relatif': -1, 'jour': j1_jour, 'nuit': j1_nuit})
+        
+        # Traitement des congés (transformation en dictionnaire)
+        conges_dict = {}
+        for c in st.session_state.liste_conges:
+            med = c["medecin"]
+            jours_conge = list(range(c["debut"].day, c["fin"].day + 1))
+            if med in conges_dict:
+                conges_dict[med].extend(jours_conge)
+            else:
+                conges_dict[med] = jours_conge
         
         planning, c_total, c_jour, c_nuit = generer_planning_flexible(
             annee_cible, mois_cible, st.session_state.liste_medecins, historique_reel, conges_dict
@@ -263,7 +284,7 @@ if st.button("🚀 Générer le planning du mois", use_container_width=True, typ
         
         stats_data = []
         for m in st.session_state.liste_medecins:
-            if "RENFORT" not in m: # Les renforts ne sont pas listés dans les stats
+            if "RENFORT" not in m: 
                 stats_data.append({
                     "Médecin": m,
                     "Total Gardes": c_total[m],
